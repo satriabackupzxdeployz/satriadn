@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+  <title>Dashboard • NGL Style</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="app-wrapper">
+  <div class="app-header" id="appHeader"></div>
+  <div id="dynamicView" class="main-view"></div>
+  <div class="copyright">© Satriadevs</div>
+</div>
+
+<div class="modal-overlay" id="messageModal">
+  <div class="modal-card">
+    <div style="display: flex; justify-content: space-between;">
+      <h3><i class="far fa-envelope-open"></i> Pesan</h3>
+      <span style="font-size: 24px; cursor: pointer;" id="closeModalBtn">&times;</span>
+    </div>
+    <div id="modalBody" style="margin: 16px 0;"></div>
+    <div class="flex-row" style="margin-top: 16px;">
+      <button class="btn btn-outline" id="shareMessageBtn"><i class="fas fa-share-alt"></i> Bagikan</button>
+      <button class="btn btn-dark" id="modalCloseBtn">Tutup</button>
+    </div>
+    <div class="watermark-share">© Satriadevs</div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="shareModal">
+  <div class="modal-card" style="max-width: 400px;">
+    <h3><i class="fas fa-share-alt"></i> Bagikan sebagai Gambar</h3>
+    <div style="margin: 16px 0; text-align: center;">
+      <canvas id="shareCanvas" width="380" height="520"></canvas>
+    </div>
+    <div class="flex-row">
+      <button class="btn btn-outline" id="downloadImageBtn"><i class="fas fa-download"></i> Simpan</button>
+      <button class="btn btn-outline" id="shareImageBtn"><i class="fas fa-share-alt"></i> Share</button>
+    </div>
+    <button class="btn btn-dark" id="closeShareModal" style="margin-top: 12px;">Tutup</button>
+    <div class="watermark-share">© Satriadevs</div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="deleteConfirmModal">
+  <div class="modal-card">
+    <h3 style="color:#ff3b30;"><i class="fas fa-exclamation-triangle"></i> Hapus Akun</h3>
+    <p style="margin:20px 0;">Yakin hapus permanen?</p>
+    <div class="flex-row">
+      <button class="btn btn-outline" id="cancelDeleteBtn">Batal</button>
+      <button class="btn btn-dark" style="background:#ff3b30;" id="confirmDeleteBtn">Hapus</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="uploadPhotoModal">
+  <div class="modal-card">
+    <h3><i class="fas fa-camera"></i> Upload Foto Profil</h3>
+    <div class="upload-area" id="uploadTrigger">
+      <i class="fas fa-cloud-upload-alt fa-2x" style="color:#aaa;"></i>
+      <p style="margin-top:8px;">Klik atau tarik foto</p>
+    </div>
+    <input type="file" id="profileUploadInput" accept="image/*">
+    <div class="flex-row" style="margin-top:16px;">
+      <button class="btn btn-outline" id="cancelUploadBtn">Batal</button>
+      <button class="btn btn-dark" id="saveUploadBtn">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+<script>
+  const user = localStorage.getItem('auth_user');
+  if (!user) window.location.href = '/';
+
+  let userData = { pic: '', urlngl: '', messages: {} };
+  let currentView = 'main';
+  let openMsg = null;
+  let tempImg = null;
+
+  async function loadData() {
+    const res = await apiCall('GET_DATA', { username: user });
+    if (res.e) { localStorage.removeItem('auth_user'); window.location.href = '/'; return; }
+    userData = res;
+    render();
+  }
+
+  const telegramSVG = `
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.57-1.37-.93-2.22-1.49-.98-.65-.35-1 .22-1.59.15-.15 2.72-2.49 2.77-2.7.01-.03.01-.14-.05-.2-.06-.06-.15-.04-.22-.02-.09.02-1.56.99-4.4 2.91-.42.29-.8.43-1.14.42-.38-.01-1.1-.21-1.64-.39-.66-.21-1.18-.33-1.13-.69.02-.19.29-.38.79-.58 3.11-1.35 5.18-2.24 6.21-2.67 2.96-1.23 3.57-1.44 3.97-1.45.09 0 .28.02.41.12.11.09.14.21.15.3.01.08.02.26 0 .41z" fill="#1a1a1a"/>
+    </svg>
+  `;
+
+  function render() {
+    if (currentView === 'main') {
+      renderHeader();
+      document.getElementById('dynamicView').innerHTML = `<div class="pages-container" id="pagesContainer"><div class="page" id="homePage"></div><div class="page" id="inboxPage"></div></div>`;
+      renderHome();
+      renderInbox();
+    } else {
+      renderSettings();
+    }
+    document.getElementById('dynamicView').classList.add('view-transition');
+    setTimeout(() => document.getElementById('dynamicView').classList.remove('view-transition'), 250);
+  }
+
+  function renderHeader() {
+    document.getElementById('appHeader').innerHTML = `
+      <div class="header-top">
+        <h1>${telegramSVG} ${window.location.hostname}</h1>
+        <i class="fas fa-cog settings-icon" id="settingsHeaderBtn"></i>
+      </div>
+      <div class="domain-badge"><i class="fas fa-link"></i> <span>${userData.urlngl || window.location.hostname+'/'+user}</span></div>
+      <div class="nav-tabs" id="mainNavTabs">
+        <div class="nav-tab active" data-page="home"><i class="fas fa-home"></i> Home</div>
+        <div class="nav-tab" data-page="inbox"><i class="fas fa-inbox"></i> Inbox <span class="inbox-badge" id="inboxBadge" style="display:none;">0</span></div>
+      </div>
+    `;
+    document.getElementById('settingsHeaderBtn').onclick = () => { currentView = 'settings'; render(); };
+    const msgs = Object.values(userData.messages || {});
+    const unread = msgs.filter(m => !m.read).length;
+    if (unread > 0) {
+      document.getElementById('inboxBadge').style.display = 'inline-block';
+      document.getElementById('inboxBadge').textContent = unread;
+    }
+    
+    document.querySelectorAll('.nav-tab').forEach(t => t.addEventListener('click', function(){
+      document.querySelectorAll('.nav-tab').forEach(tb => tb.classList.remove('active'));
+      this.classList.add('active');
+      const container = document.getElementById('pagesContainer');
+      if (container) container.scrollTo({ left: this.dataset.page==='home'?0:container.clientWidth, behavior:'smooth' });
+    }));
+  }
+
+  function renderHome() {
+    const link = window.location.protocol + '//' + (userData.urlngl || window.location.host + '/' + user);
+    document.getElementById('homePage').innerHTML = `
+      <div class="profile-section">
+        <img src="${userData.pic}" class="profile-pic">
+        <div class="profile-name"><i class="far fa-user-circle"></i> @${user}</div>
+      </div>
+      <div class="section-card">
+        <h3><i class="fas fa-share-alt"></i> Link Anonim</h3>
+        <div class="link-box">
+          <span>${userData.urlngl || window.location.host+'/'+user}</span>
+          <button class="copy-btn" id="copyLinkHome"><i class="far fa-copy"></i> Salin</button>
+        </div>
+      </div>
+      <button class="btn btn-outline" id="logoutBtn" style="color:#ff3b30; border-color:#ff3b30; font-weight:600;"><i class="fas fa-sign-out-alt"></i> Logout</button>
+    `;
+    document.getElementById('copyLinkHome').onclick = function() {
+      navigator.clipboard.writeText(link).then(() => {
+        this.innerHTML = '<i class="fas fa-check"></i> Tersalin';
+        this.classList.add('copy-success');
+        setTimeout(()=>{ this.innerHTML='<i class="far fa-copy"></i> Salin'; this.classList.remove('copy-success'); },2000);
+      });
+    };
+    document.getElementById('logoutBtn').onclick = () => {
+      localStorage.removeItem('auth_user');
+      window.location.href = '/';
+    };
+  }
+
+  function renderInbox() {
+    const msgs = Object.values(userData.messages || {}).sort((a,b) => b.id - a.id);
+    let html = `<h3><i class="fas fa-inbox"></i> Kotak Masuk (${msgs.length})</h3>`;
+    msgs.forEach(m => {
+      html += `<div class="message-item ${m.read?'read':'unread'}" data-id="${m.id}">
+        <div class="msg-sender"><span><i class="fas fa-user-secret"></i> ${m.sender}</span><span>${m.timestamp}</span></div>
+        <div>${m.read? m.text : '<span class="blur-content">🔒 Pesan tersembunyi</span>'}</div>
+        ${m.media?`<div class="media-blur"><img src="${m.media}"></div>`:''}
+      </div>`;
+    });
+    document.getElementById('inboxPage').innerHTML = html;
+    document.querySelectorAll('.message-item').forEach(el => el.addEventListener('click', () => openMessage(el.dataset.id)));
+  }
+
+  async function openMessage(id) {
+    const msg = userData.messages[id];
+    if(!msg) return;
+    openMsg = msg;
+    if(!msg.read) {
+      msg.read = true;
+      apiCall('READ_MSG', { username: user, id: id });
+      render();
+    }
+    document.getElementById('modalBody').innerHTML = `
+      <strong><i class="fas fa-user-secret"></i> ${msg.sender}</strong> · ${msg.timestamp}
+      <p style="margin:16px 0;">${msg.text}</p>
+      ${msg.media?`<img src="${msg.media}" style="max-width:100%; border-radius:18px;">`:''}
+    `;
+    document.getElementById('messageModal').classList.add('show');
+  }
+
+  function renderSettings() {
+    document.getElementById('appHeader').innerHTML = '';
+    document.getElementById('dynamicView').innerHTML = `
+      <div class="settings-full">
+        <div style="display:flex; align-items:center; margin-bottom:24px;">
+          <i class="fas fa-arrow-left" id="backFromSettings" style="font-size:1.5rem; cursor:pointer;"></i>
+          <h2 style="margin-left:16px;">Pengaturan</h2>
+        </div>
+        <div class="settings-item" id="changePhotoSetting"><span><i class="fas fa-camera"></i> Ganti Foto Profil</span><i class="fas fa-chevron-right"></i></div>
+        <div class="settings-item"><span><i class="fas fa-user"></i> Username</span><span>@${user}</span></div>
+        <div class="settings-item delete-account" id="deleteAccountBtn"><span><i class="fas fa-trash-alt"></i> Hapus Akun</span></div>
+      </div>
+    `;
+    document.getElementById('backFromSettings').onclick = ()=>{ currentView='main'; render(); };
+    document.getElementById('deleteAccountBtn').onclick = ()=> document.getElementById('deleteConfirmModal').classList.add('show');
+    document.getElementById('changePhotoSetting').onclick = ()=> { tempImg = null; document.getElementById('uploadPhotoModal').classList.add('show'); };
+  }
+
+  document.getElementById('uploadTrigger').onclick = ()=> document.getElementById('profileUploadInput').click();
+  document.getElementById('profileUploadInput').onchange = (e) => {
+    const file = e.target.files[0];
+    if(file) {
+      const reader = new FileReader();
+      reader.onload = ev => tempImg = ev.target.result;
+      reader.readAsDataURL(file);
+    }
+  };
+  
+  document.getElementById('saveUploadBtn').onclick = async ()=> {
+    if(tempImg) {
+      document.getElementById('saveUploadBtn').innerText = 'Menyimpan...';
+      await apiCall('UPDATE_PIC', { username: user, pic: tempImg });
+      userData.pic = tempImg;
+      document.getElementById('uploadPhotoModal').classList.remove('show');
+      document.getElementById('saveUploadBtn').innerText = 'Simpan';
+      render();
+    }
+  };
+  document.getElementById('cancelUploadBtn').onclick = ()=> document.getElementById('uploadPhotoModal').classList.remove('show');
+  
+  document.getElementById('confirmDeleteBtn').onclick = async ()=>{
+    await apiCall('DELETE_ACC', { username: user });
+    localStorage.removeItem('auth_user');
+    window.location.href = '/';
+  };
+  document.getElementById('cancelDeleteBtn').onclick = ()=> document.getElementById('deleteConfirmModal').classList.remove('show');
+
+  document.getElementById('closeModalBtn').onclick = ()=> document.getElementById('messageModal').classList.remove('show');
+  document.getElementById('modalCloseBtn').onclick = ()=> document.getElementById('messageModal').classList.remove('show');
+
+  document.getElementById('shareMessageBtn').onclick = () => {
+    if(!openMsg) return;
+    const msg = openMsg;
+    document.getElementById('messageModal').classList.remove('show');
+    const canvas = document.getElementById('shareCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 380; canvas.height = 520;
+    
+    ctx.fillStyle = msg.read ? '#f9f9f9' : '#ffffff';
+    ctx.fillRect(0, 0, 380, 520);
+    ctx.strokeStyle = '#eaeaea';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(2, 2, 376, 516);
+    if (!msg.read) { ctx.fillStyle = '#1a1a1a'; ctx.fillRect(2, 2, 6, 516); }
+    
+    ctx.fillStyle = '#1a1a1a';
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.fillText(`${msg.sender}`, 20, 36);
+    ctx.font = '11px system-ui';
+    ctx.fillStyle = '#999';
+    ctx.fillText(msg.timestamp, 20, 58);
+    
+    ctx.fillStyle = '#2c2c2c';
+    ctx.font = '14px system-ui, sans-serif';
+    
+    const words = msg.text.split(' '); let line = '', yPos = 86;
+    for(let n=0; n<words.length; n++) {
+      let test = line + words[n] + ' ';
+      if(ctx.measureText(test).width > 340) { ctx.fillText(line, 20, yPos); line = words[n]+' '; yPos += 22; }
+      else line = test;
+    }
+    ctx.fillText(line, 20, yPos);
+    yPos += 30;
+    
+    if (msg.media) {
+      const img = new Image(); img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        ctx.fillStyle = '#fafafa'; ctx.fillRect(20, yPos, 100, 100);
+        ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 1; ctx.strokeRect(20, yPos, 100, 100);
+        ctx.drawImage(img, 22, yPos+2, 96, 96);
+        addFoot(yPos + 120);
+      };
+      img.src = msg.media;
+    } else { addFoot(yPos); }
+    
+    function addFoot(bottomY) {
+      ctx.font = '11px system-ui'; ctx.fillStyle = '#aaa';
+      ctx.fillText('© Satriadevs', 20, bottomY + 20);
+      document.getElementById('shareModal').classList.add('show');
+    }
+  };
+
+  document.getElementById('downloadImageBtn').onclick = () => {
+    const link = document.createElement('a'); link.download = 'pesan-anonim.png';
+    link.href = document.getElementById('shareCanvas').toDataURL(); link.click();
+  };
+  document.getElementById('shareImageBtn').onclick = async () => {
+    const blob = await (await fetch(document.getElementById('shareCanvas').toDataURL())).blob();
+    const file = new File([blob], 'pesan.png', {type:'image/png'});
+    if(navigator.share) navigator.share({ files: [file] });
+  };
+  document.getElementById('closeShareModal').onclick = ()=> document.getElementById('shareModal').classList.remove('show');
+
+  loadData();
+</script>
+</body>
+</html>
