@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+  <title>Send</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="send-container" id="sendContainer">
+    <div class="recipient-header">
+      <img class="recipient-avatar" id="recipientAvatar" src="https://files.clxgo.my.id/9CWgw.jpeg" alt="Profile">
+      <div class="recipient-name">
+        <span id="recipientDisplayName">...</span>
+      </div>
+      <div class="recipient-username">
+        <i class="fas fa-at" style="color: #aaa;"></i>
+        <span id="recipientUsername">...</span>
+      </div>
+    </div>
+
+    <div class="send-form">
+      <div class="form-group">
+        <label><i class="fas fa-user-secret"></i> Nama Kamu (opsional)</label>
+        <div class="input-wrapper">
+          <input type="text" id="senderName" placeholder="Contoh: Teman Rahasia" maxlength="30" value="Anonim">
+        </div>
+        <div class="char-counter"><span id="nameCount">6</span>/30</div>
+      </div>
+
+      <div class="form-group">
+        <label><i class="fas fa-image"></i> Upload Foto (opsional)</label>
+        <div class="upload-area" id="uploadArea">
+          <i class="fas fa-cloud-upload-alt"></i>
+          <p>Klik untuk pilih foto</p>
+          <p class="hint" style="font-size:0.75rem; color:#aaa; margin-top:4px;">Format: JPG, PNG, GIF (Max 5MB)</p>
+        </div>
+        <input type="file" id="photoInput" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;">
+        <div class="photo-preview" id="photoPreview"></div>
+      </div>
+
+      <div class="form-group">
+        <label><i class="fas fa-pen"></i> Pesan Kamu</label>
+        <div class="input-wrapper">
+          <textarea id="messageText" placeholder="Tulis pesan rahasia kamu di sini..." maxlength="500"></textarea>
+        </div>
+        <div class="char-counter"><span id="messageCount">0</span>/500</div>
+      </div>
+
+      <div class="anon-info">
+        <i class="fas fa-mask"></i>
+        <span>Pesan ini akan dikirim secara anonim. Identitas kamu dirahasiakan.</span>
+      </div>
+
+      <button class="btn-send" id="sendButton">
+        <i class="fas fa-paper-plane"></i>
+        Kirim Pesan Anonim
+      </button>
+    </div>
+
+    <div class="send-footer">
+      © Satriadevs
+    </div>
+  </div>
+
+  <div class="success-modal" id="successModal">
+    <div class="success-card">
+      <div class="success-icon">
+        <i class="fas fa-check"></i>
+      </div>
+      <h3>Terkirim!</h3>
+      <p>Pesan anonim kamu berhasil dikirim ke <strong id="successRecipient">...</strong>.</p>
+      <button class="btn-close" id="closeSuccessBtn">Selesai</button>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+  <script>
+    const targetUser = window.location.pathname.replace('/', '');
+    document.getElementById('recipientUsername').textContent = targetUser;
+    document.getElementById('recipientDisplayName').textContent = targetUser.toUpperCase();
+    document.getElementById('successRecipient').textContent = targetUser.toUpperCase();
+
+    let selectedPhoto = null;
+    const senderNameInput = document.getElementById('senderName');
+    const messageTextInput = document.getElementById('messageText');
+    const nameCount = document.getElementById('nameCount');
+    const messageCount = document.getElementById('messageCount');
+
+    senderNameInput.addEventListener('input', () => nameCount.textContent = senderNameInput.value.length);
+    messageTextInput.addEventListener('input', () => messageCount.textContent = messageTextInput.value.length);
+
+    async function loadProfile() {
+      const res = await apiCall('GET_PROFILE', { username: targetUser });
+      if(res.pic) document.getElementById('recipientAvatar').src = res.pic;
+    }
+
+    document.getElementById('uploadArea').onclick = () => document.getElementById('photoInput').click();
+    document.getElementById('photoInput').onchange = (e) => {
+      const f = e.target.files[0];
+      if(f) {
+        if (f.size > 5 * 1024 * 1024) return alert('Ukuran file maksimal 5MB.');
+        const r = new FileReader();
+        r.onload = ev => {
+          selectedPhoto = ev.target.result;
+          document.getElementById('photoPreview').innerHTML = `
+            <div class="preview-item">
+              <img src="${selectedPhoto}">
+              <span class="remove-photo" onclick="selectedPhoto=null; document.getElementById('photoPreview').innerHTML='';">
+                <i class="fas fa-times"></i>
+              </span>
+            </div>`;
+        };
+        r.readAsDataURL(f);
+      }
+    };
+
+    document.getElementById('sendButton').onclick = async () => {
+      const msg = messageTextInput.value.trim();
+      const s = senderNameInput.value.trim() || 'Anonim';
+      if(!msg) return alert('Tulis pesan kamu terlebih dahulu.');
+      
+      const btn = document.getElementById('sendButton');
+      btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Mengirim...';
+      
+      await apiCall('SEND_MSG', { to: targetUser, sender: s, text: msg, media: selectedPhoto });
+      
+      document.getElementById('successModal').classList.add('show');
+      btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Kirim Pesan Anonim';
+      messageTextInput.value = '';
+      selectedPhoto = null; 
+      document.getElementById('photoPreview').innerHTML = '';
+      messageCount.textContent = '0';
+    };
+
+    document.getElementById('closeSuccessBtn').onclick = () => {
+      document.getElementById('successModal').classList.remove('show');
+    };
+    
+    document.getElementById('successModal').onclick = (e) => {
+      if (e.target === document.getElementById('successModal')) {
+        document.getElementById('successModal').classList.remove('show');
+      }
+    };
+
+    loadProfile();
+  </script>
+</body>
+</html>
